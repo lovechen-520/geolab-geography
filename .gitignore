@@ -1,0 +1,24 @@
+# 本地开发/验收产物（不属于开源内容）
+.tasks/
+.temp/
+docs/screenshots/.cache/
+
+# 依赖与构建产物（本项目零依赖，防误提交）
+node_modules/
+dist/
+
+# 本地模型配置与密钥（切勿提交）
+.env
+.env.*
+.session-key
+*.local
+
+# 编辑器 / 操作系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 日志
+*.log

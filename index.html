@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="GeoLab 高中地理互动课堂：按人教版口径组织的知识卡、互动演示、AI 助教与练习诊断，双击即用、支持离线学习。">
+  <title>GeoLab · 高中地理互动课堂</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10' fill='%23167D70'/%3E%3Cpath d='M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20' stroke='%23FFFFFF' stroke-width='1.5' fill='none'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#view">跳到主内容</a>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="#/home" aria-label="GeoLab 高中地理互动课堂，返回首页">
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" focusable="false">
+            <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"></circle>
+            <ellipse cx="12" cy="12" rx="4.2" ry="9" stroke="currentColor" stroke-width="1.1"></ellipse>
+            <path d="M3.6 9h16.8M3.6 15h16.8" stroke="currentColor" stroke-width="1.1"></path>
+          </svg>
+        </span>
+        <span class="brand-name">GeoLab</span>
+        <span class="brand-sub">高中地理互动课堂</span>
+      </a>
+
+      <nav class="site-nav" aria-label="主导航">
+        <a href="#/home" data-route="home">首页</a>
+        <a href="#/learn" data-route="learn">学习</a>
+        <a href="#/lab" data-route="lab">实验室</a>
+        <a href="#/tutor" data-route="tutor">AI 助教</a>
+        <a href="#/practice" data-route="practice">练习</a>
+        <a href="#/report" data-route="report">报告</a>
+      </nav>
+
+      <span class="badge mode-badge" id="modeBadge" role="status" title="当前未配置模型服务，全站功能可离线使用">
+        <span class="mode-dot" aria-hidden="true"></span>
+        <span class="mode-label">离线模式</span>
+        <span class="mode-note">本地可用</span>
+      </span>
+    </div>
+  </header>
+
+  <main id="view" tabindex="-1">
+    <noscript>
+      <section class="empty-state">
+        <h2>需要启用 JavaScript</h2>
+        <p>GeoLab 的页面由浏览器本地脚本渲染，请启用 JavaScript 后刷新本页。</p>
+      </section>
+    </noscript>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <p>GeoLab · 高中地理互动课堂 —— 人教版教材口径，打开即用，支持离线学习。</p>
+      <p class="footer-small">学习进度仅保存在本机浏览器中；本站不设用户系统，不上传任何个人数据。</p>
+    </div>
+  </footer>
+
+  <script src="data/knowledge.js"></script>
+  <script src="data/quiz.js"></script>
+  <script src="js/quiz.js"></script>
+  <script src="js/interactive.js"></script>
+  <script src="js/tutor.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
