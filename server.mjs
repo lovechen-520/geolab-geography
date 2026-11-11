@@ -4,6 +4,7 @@
    契约见 SPEC §8：GET /api/health、POST /api/chat（SSE 流式）。 */
 
 import http from "node:http";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
@@ -12,15 +13,19 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number.parseInt(process.env.PORT || "8787", 10) || 8787;
 
-const MODES = ["offline", "openai"];
+const MODES = ["offline", "openai", "teleagent"];
 const RAW_MODE = String(process.env.GEO_MODEL_MODE || "offline").trim().toLowerCase();
 const MODE = MODES.indexOf(RAW_MODE) === -1 ? "offline" : RAW_MODE;
 
 const OPENAI_BASE_URL = String(process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, "");
 const OPENAI_MODEL = String(process.env.OPENAI_MODEL || "gpt-4o-mini");
 
+const TELEAGENT_BASE = String(process.env.TELEAGENT_BASE_URL || "http://127.0.0.1:4397").replace(/\/+$/, "");
+const TELEAGENT_MODEL = String(process.env.TELEAGENT_MODEL || "NewApi/chat-pro");
+
 const MODEL_NAME =
   MODE === "openai" ? OPENAI_MODEL :
+  MODE === "teleagent" ? "TeleAgent 本机模型" :
   "GeoLab 离线知识库";
 
 const UPSTREAM_TIMEOUT_MS = 120000;
@@ -548,6 +553,144 @@ function describeError(err, fallback) {
   return fallback + (message ? "：" + message : "");
 }
 
+/* ================= TeleAgent 本机模式 ================= */
+
+const TA_SESSIONS = new Map();
+const TA_INITIALIZED = new Set();
+
+function readTeleagentKey() {
+  const direct = process.env.TELEAGENT_SESSION_KEY;
+  if (direct && direct.trim()) {
+    return direct.trim();
+  }
+  const file = process.env.TELEAGENT_KEY_FILE;
+  if (file && file.trim()) {
+    try {
+      return fs.readFileSync(file.trim(), "utf8").trim();
+    } catch (err) {
+      return "";
+    }
+  }
+  return "";
+}
+
+function signTaHeaders(method, pathname, key) {
+  const timestamp = String(Date.now());
+  const nonce = crypto.randomBytes(12).toString("hex");
+  const payload = ["local-v1", method.toUpperCase(), pathname, timestamp, nonce].join("\n");
+  const signature = crypto.createHmac("sha256", key).update(payload).digest("base64url");
+  return {
+    "X-SA-Sign-Version": "local-v1",
+    "X-SA-Timestamp": timestamp,
+    "X-SA-Nonce": nonce,
+    "X-SA-Signature": signature
+  };
+}
+
+async function taRequest(method, pathname, body, key, signal) {
+  const headers = Object.assign(
+    { "Content-Type": "application/json", Accept: "application/json" },
+    signTaHeaders(method, pathname, key)
+  );
+  const response = await fetch(TELEAGENT_BASE + pathname, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal
+  });
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch (err) {
+    data = { content: text };
+  }
+  if (!response.ok) {
+    throw new Error(
+      "TeleAgent 返回 " + response.status + (text ? "：" + text.slice(0, 160).replace(/\s+/g, " ") : "")
+    );
+  }
+  return data;
+}
+
+function taExtractText(data, depth) {
+  const d = typeof depth === "number" ? depth : 0;
+  if (!data || d > 5) {
+    return "";
+  }
+  if (typeof data === "string") {
+    return data;
+  }
+  if (Array.isArray(data.parts)) {
+    const texts = data.parts
+      .filter((part) => part && part.type === "text" && typeof part.text === "string")
+      .map((part) => part.text);
+    if (texts.length) {
+      return texts.join("\n");
+    }
+  }
+  if (data.data) {
+    const nested = taExtractText(data.data, d + 1);
+    if (nested) {
+      return nested;
+    }
+  }
+  if (data.message) {
+    const nested = taExtractText(data.message, d + 1);
+    if (nested) {
+      return nested;
+    }
+  }
+  if (typeof data.content === "string" && data.content.trim()) {
+    return data.content;
+  }
+  if (typeof data.text === "string" && data.text.trim()) {
+    return data.text;
+  }
+  return "";
+}
+
+async function askTeleagent(question, sessionId, signal) {
+  const key = readTeleagentKey();
+  if (!key) {
+    throw new Error("未配置 TELEAGENT_SESSION_KEY 或 TELEAGENT_KEY_FILE（请用 start-server.ps1 启动）");
+  }
+  const cacheKey = String(sessionId || "geolab-default").slice(0, 120);
+  let taSessionId = TA_SESSIONS.get(cacheKey);
+  if (!taSessionId) {
+    const created = await taRequest("POST", "/session", { title: "GeoLab 地理助教" }, key, signal);
+    taSessionId = (created && (created.id || (created.data && created.data.id))) || "";
+    if (!taSessionId) {
+      throw new Error("TeleAgent 会话创建失败（未返回会话 id）");
+    }
+    TA_SESSIONS.set(cacheKey, taSessionId);
+  }
+
+  let prompt = question;
+  if (!TA_INITIALIZED.has(taSessionId)) {
+    prompt = PERSONA + "\n\n【学生提问】" + question;
+  }
+
+  const slash = TELEAGENT_MODEL.indexOf("/");
+  const model = slash > 0
+    ? { providerID: TELEAGENT_MODEL.slice(0, slash), modelID: TELEAGENT_MODEL.slice(slash + 1) }
+    : { providerID: "NewApi", modelID: TELEAGENT_MODEL };
+
+  const reply = await taRequest(
+    "POST",
+    "/session/" + encodeURIComponent(taSessionId) + "/message",
+    { model, parts: [{ type: "text", text: prompt }] },
+    key,
+    signal
+  );
+  TA_INITIALIZED.add(taSessionId);
+  const text = taExtractText(reply);
+  if (!text) {
+    throw new Error("TeleAgent 未返回可用的回答文本");
+  }
+  return text;
+}
+
 /* ================= /api/chat ================= */
 
 async function handleChat(req, res) {
@@ -590,6 +733,18 @@ async function handleChat(req, res) {
   try {
     if (MODE === "openai") {
       await streamOpenAI(res, messages, controller.signal);
+    } else if (MODE === "teleagent") {
+      try {
+        const answer = await askTeleagent(question, payload.sessionId, controller.signal);
+        await streamChars(res, answer, controller.signal);
+      } catch (err) {
+        if (!clientGone && !controller.signal.aborted) {
+          sseWrite(res, { delta: "（TeleAgent 本机服务不可用，已降级为离线演示模式）\n\n" });
+          const fallback = buildOfflineAnswer(question);
+          await streamChars(res, fallback, controller.signal);
+        }
+      }
+      sseDone(res);
     } else {
       const answer = buildOfflineAnswer(question);
       await streamChars(res, answer, controller.signal);
@@ -737,5 +892,8 @@ server.listen(PORT, "127.0.0.1", () => {
   console.log("当前模式: " + MODE + " · 模型: " + MODEL_NAME);
   if (MODE === "openai" && !process.env.OPENAI_API_KEY) {
     console.log("提示: openai 模式缺少 OPENAI_API_KEY，/api/chat 会返回配置错误事件。");
+  }
+  if (MODE === "teleagent" && !readTeleagentKey()) {
+    console.log("提示: teleagent 模式缺少会话密钥，/api/chat 会降级为离线演示；请用 start-server.ps1 启动。");
   }
 });

@@ -10,7 +10,19 @@
 
 双击 `index.html` 即可。浏览知识卡、做互动演示、练习诊断、查看学习报告全部可用；AI 助教进入「离线演示模式」，用内置知识库按关键词回答，不联网。
 
-### 方式 B：接入模型（OpenAI 兼容 API）
+### 方式 B：接入本机 TeleAgent 模型（本机、无需 API Key）
+
+前提：本机已安装并运行 **TeleAgent 桌面版**（网站通过它的本地接口调用模型），且存在接管工具目录 `D:\DSH-Workspaces\teleagent-bridge`。
+
+在项目目录执行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\start-server.ps1
+```
+
+脚本会确认 TeleAgent 后端在运行 → 自动获取本次运行期的本地会话密钥 → 以 `teleagent` 模式启动服务。浏览器打开 <http://127.0.0.1:8787> 即可真实对话（使用 TeleAgent 的账号与模型）。TeleAgent 重启后密钥会变化，重跑一次脚本即可。
+
+### 方式 C：接入模型（OpenAI 兼容 API）
 
 ```powershell
 $env:GEO_MODEL_MODE = 'openai'
@@ -48,14 +60,15 @@ node server.mjs        # 或 PORT=8080 node server.mjs
 
 - `GET /api/health` → `{ ok, mode, model }`
 - `POST /api/chat`：请求 `{ messages: [{role, content}], sessionId? }`；响应 `text/event-stream`，逐条 `data: {"delta":"..."}`，结束 `data: [DONE]`，出错 `data: {"error":"..."}`
-- 两种模式由 `GEO_MODEL_MODE` 切换：
+- 三种模式由 `GEO_MODEL_MODE` 切换：
 
 | 模式 | 说明 | 必要变量 |
 | --- | --- | --- |
 | `offline`（默认） | 不联网，基于 `data/knowledge.js` 关键词匹配讲解/出题/批改，逐字流式输出 | 无 |
 | `openai` | OpenAI 兼容 Chat Completions 流式转发 | `OPENAI_API_KEY`、`OPENAI_MODEL`、可选 `OPENAI_BASE_URL` |
+| `teleagent` | 调用本机 TeleAgent 桌面版本地后端（HMAC 签名），失败自动降级 offline | `TELEAGENT_KEY_FILE` 或 `TELEAGENT_SESSION_KEY`，可选 `TELEAGENT_MODEL`（默认 `NewApi/chat-pro`） |
 
-两种模式的助教人设统一由服务端注入：人教版口径、先结论后推理、判读用「以温定带、以水定型」、出题必给解析、拒答与地理无关的请求、中国版图表述规范。想接其他模型，只需在 `server.mjs` 的 `streamOpenAI` 处适配新的 API 形态。
+三种模式的助教人设统一由服务端注入：人教版口径、先结论后推理、判读用「以温定带、以水定型」、出题必给解析、拒答与地理无关的请求、中国版图表述规范。
 
 ## 目录结构
 
